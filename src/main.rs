@@ -104,7 +104,7 @@ fn setup(
     // camera
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(0., 4.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Transform::from_xyz(0., 6.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
         BillboardCamera,
     ));
 }

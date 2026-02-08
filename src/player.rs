@@ -58,7 +58,6 @@ pub fn move_player_system(
     camera: Query<&Transform, (With<BillboardCamera>, Without<Player>)>,
     key: Res<ButtonInput<KeyCode>>,
     wall_grid: Res<WallGrid>,
-    mut gizmos: Gizmos,
 ) {
     let Ok(camera) = camera.single() else {
         return;
@@ -141,13 +140,5 @@ pub fn move_player_system(
 
         player_transform.translation.x += delta_push.x;
         player_transform.translation.z += delta_push.y;
-
-        for yi in 0..5 {
-            gizmos.sphere(
-                player.cursor.round() + Vec3::Y * (yi as f32 * 0.2 + 0.1),
-                0.3,
-                Color::linear_rgb(0., 1., 1.),
-            );
-        }
     }
 }
