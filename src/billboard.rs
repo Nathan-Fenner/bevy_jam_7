@@ -61,7 +61,7 @@ fn add_mesh_system(
 }
 
 fn setup_billboards_system(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>) {
-    let mesh = meshes.add(Plane3d::new(-Vec3::Z, Vec2::splat(1.)));
+    let mesh = meshes.add(Plane3d::new(-Vec3::Z, Vec2::splat(0.5)));
     commands.insert_resource(BillboardMaterials {
         mesh,
         materials: HashMap::new(),
@@ -69,12 +69,14 @@ fn setup_billboards_system(mut commands: Commands, mut meshes: ResMut<Assets<Mes
 }
 
 fn track_billboards_system(
+    time: Res<Time>,
     camera: Query<&Transform, With<BillboardCamera>>,
     mut billboards: Query<
         (&mut Transform, Option<&Player>),
         (Without<BillboardCamera>, With<Billboard>),
     >,
 ) {
+    let total_time = time.elapsed_secs();
     let Ok(camera) = camera.single() else {
         return;
     };
@@ -90,8 +92,14 @@ fn track_billboards_system(
             None => 1.,
         };
 
+        let wiggle = match player {
+            Some(player) => player.velocity.length().min(1.) * (total_time * 19.).cos() * 0.1,
+            None => 0.,
+        };
+
         let target = -*camera.forward() * Vec3::new(1., 0., 1.) * facing_direction;
 
         billboard_transform.look_to(target, -Vec3::Y);
+        billboard_transform.rotate_local_z(wiggle);
     }
 }

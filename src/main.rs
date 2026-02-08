@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use rand::Rng;
 
 use crate::{
     billboard::{Billboard, BillboardCamera, BillboardPlugin},
@@ -41,8 +42,34 @@ fn setup(
         Billboard {
             image: "duck_realtor.png".to_string(),
         },
-        Transform::from_xyz(0.0, 0.5, 0.0),
+        Transform::from_xyz(0.0, 0.45, 0.0),
     ));
+
+    // wall
+
+    let mut rng = rand::rng();
+
+    let wall_mesh = meshes.add(Cuboid::default());
+    let wall_material = materials.add(Color::linear_rgb(1., 0.5, 0.2));
+    for x in -5..=5i32 {
+        for z in -5..=5i32 {
+            if x.abs() <= 2 && z.abs() <= 2 {
+                continue;
+            }
+
+            if rng.random_bool(0.5) {
+                continue;
+            }
+
+            commands.spawn((
+                player::Wall,
+                Mesh3d(wall_mesh.clone()),
+                MeshMaterial3d(wall_material.clone()),
+                Transform::from_translation(Vec3::new(x as f32, 0.5, z as f32)),
+            ));
+        }
+    }
+
     // light
     commands.spawn((
         PointLight {
@@ -54,7 +81,7 @@ fn setup(
     // camera
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(-2.5, 4.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Transform::from_xyz(0., 4.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
         BillboardCamera,
     ));
 }
