@@ -1,4 +1,7 @@
-use bevy::{platform::collections::HashSet, prelude::*};
+use bevy::{
+    platform::collections::{HashMap, HashSet},
+    prelude::*,
+};
 
 use crate::{
     billboard::Billboard,
@@ -16,7 +19,8 @@ impl Plugin for ItemPlugin {
 
 #[derive(Component)]
 pub struct Item {
-    pub is_held: bool,
+    pub glued: Vec<IVec2>,
+    pub is_held: Option<IVec2>,
 }
 
 #[derive(Component)]
@@ -29,7 +33,7 @@ pub struct PointIcon;
 pub struct GrabIconEntity(Entity);
 
 #[derive(Resource)]
-pub struct PointIconEntity(Entity);
+pub struct PointIconEntity(Vec<Entity>);
 
 pub fn setup_grab_system(mut commands: Commands) {
     let grab_icon = commands
@@ -43,16 +47,20 @@ pub fn setup_grab_system(mut commands: Commands) {
         .id();
     commands.insert_resource(GrabIconEntity(grab_icon));
 
-    let point_icon = commands
-        .spawn((
-            PointIcon,
-            Billboard {
-                image: "point_icon.png".to_string(),
-            },
-            Transform::from_scale(Vec3::splat(0.)),
-        ))
-        .id();
-    commands.insert_resource(PointIconEntity(point_icon));
+    let point_icons = (0..10)
+        .map(|_| {
+            commands
+                .spawn((
+                    PointIcon,
+                    Billboard {
+                        image: "point_icon.png".to_string(),
+                    },
+                    Transform::from_scale(Vec3::splat(0.)),
+                ))
+                .id()
+        })
+        .collect::<Vec<Entity>>();
+    commands.insert_resource(PointIconEntity(point_icons));
 }
 
 pub fn grab_item_system(
@@ -79,56 +87,117 @@ pub fn grab_item_system(
     // Tracks the squares where items cannot be placed, because an item is already there.
     let mut item_blocked_squares: HashSet<IVec2> = HashSet::new();
     for (_item_entity, item_transform, item) in items.iter() {
-        if item.is_held {
+        if item.is_held.is_some() {
             continue;
         }
         item_blocked_squares.insert(item_transform.translation.xz().round().as_ivec2());
     }
 
-    let mut set_icon_point = false;
+    #[derive(Copy, Clone)]
+    struct ItemType {
+        entity: Entity,
+        is_wall: bool,
+    }
+
+    let mut cursor_place_offsets: HashMap<IVec2, ItemType> = HashMap::new();
+    let mut ground_items: HashMap<IVec2, ItemType> = HashMap::new();
+    for (item_entity, item_transform, item) in items.iter() {
+        if let Some(hold_offset) = item.is_held {
+            cursor_place_offsets.insert(
+                hold_offset,
+                ItemType {
+                    entity: item_entity,
+                    is_wall: is_wall.contains(item_entity),
+                },
+            );
+        } else {
+            ground_items.insert(
+                item_transform.translation.xz().round().as_ivec2(),
+                ItemType {
+                    entity: item_entity,
+                    is_wall: is_wall.contains(item_entity),
+                },
+            );
+        }
+    }
+
+    let mut can_place_item = true;
+    for (&item_offset, item_type) in cursor_place_offsets.iter() {
+        let place_at = player_cursor + item_offset;
+        if walls.walls.contains(&place_at) {
+            // The held item is blocked by a wall.
+            can_place_item = false;
+            break;
+        }
+        if item_blocked_squares.contains(&place_at) {
+            // Another item is at this location.
+            can_place_item = false;
+            break;
+        }
+        if item_type.is_wall
+            && place_at
+                .as_vec2()
+                .distance(player_transform.translation.xz())
+                <= 0.5
+        {
+            // Would place a wall on top of the player.
+            can_place_item = false;
+            break;
+        }
+    }
+
+    // Point to placement squares.
+    let mut set_point_icon_index = 0;
+    if can_place_item {
+        let mut keys_sorted = cursor_place_offsets.keys().copied().collect::<Vec<IVec2>>();
+        keys_sorted.sort_by_key(|v| (v.x, v.y));
+        for hold_offset in keys_sorted {
+            let point_icon_entity = point_icon.0[set_point_icon_index];
+            set_point_icon_index += 1;
+
+            let icon_transform = &mut *arbitrary_transform.get_mut(point_icon_entity).unwrap();
+            icon_transform.scale = if hold_offset == IVec2::ZERO {
+                Vec3::splat(1.)
+            } else {
+                Vec3::splat(0.5)
+            };
+            let target_position = Vec3::new(
+                player_cursor.x as f32 + hold_offset.x as f32,
+                0.,
+                player_cursor.y as f32 + hold_offset.y as f32,
+            ) + Vec3::Y * 0.5;
+
+            if icon_transform.translation.distance(target_position) > 3.7 {
+                icon_transform.translation = target_position;
+            } else {
+                icon_transform.translation = icon_transform
+                    .translation
+                    .lerp(target_position, (15. * dt).min(1.));
+            }
+        }
+    }
 
     for (item_entity, mut item_transform, mut item) in items.iter_mut() {
-        if item.is_held {
+        if let Some(hold_offset) = item.is_held {
             is_holding = true;
             item_transform.translation = item_transform.translation.lerp(
-                player_transform.translation + Vec3::Y * 0.75,
+                player_transform.translation
+                    + Vec3::Y * 0.75
+                    + Vec3::new(hold_offset.x as f32, 0., hold_offset.y as f32),
                 (dt * 15.).min(1.),
             );
 
             // Attempt to place at the cursor position, assuming there is room.
-            if !walls.walls.contains(&player_cursor)
-                && !item_blocked_squares.contains(&player_cursor)
-            {
-                // If it is a wall, do not allow it placed on top of the player.
-                if !is_wall.contains(item_entity)
-                    || player_cursor
-                        .as_vec2()
-                        .distance(player_transform.translation.xz())
-                        > 0.5
-                {
-                    let icon_transform = &mut *arbitrary_transform.get_mut(point_icon.0).unwrap();
-                    icon_transform.scale = Vec3::splat(1.);
-                    let target_position =
-                        Vec3::new(player_cursor.x as f32, 0., player_cursor.y as f32)
-                            + Vec3::Y * 0.5;
+            if can_place_item {
+                let place_at = player_cursor + hold_offset;
 
-                    if icon_transform.translation.distance(target_position) > 3.7 {
-                        icon_transform.translation = target_position;
-                    } else {
-                        icon_transform.translation = icon_transform
-                            .translation
-                            .lerp(target_position, (15. * dt).min(1.));
-                    }
-                    set_icon_point = true;
+                if key.just_pressed(KeyCode::KeyE) {
+                    item_transform.translation =
+                        Vec3::Y * 0.5 + Vec3::new(place_at.x as f32, 0., place_at.y as f32);
+                    item.is_held = None;
 
-                    if key.just_pressed(KeyCode::KeyE) {
-                        item_transform.translation = Vec3::Y * 0.5
-                            + Vec3::new(player_cursor.x as f32, 0., player_cursor.y as f32);
-                        item.is_held = false;
-
-                        if let Ok(mut wall) = is_wall.get_mut(item_entity) {
-                            wall.enabled = true;
-                        }
+                    if let Ok(mut wall) = is_wall.get_mut(item_entity) {
+                        wall.enabled = true;
                     }
                 }
             }
@@ -137,7 +206,12 @@ pub fn grab_item_system(
 
     let mut set_icon_grab = false;
 
-    for (item_entity, item_transform, mut item) in items.iter_mut() {
+    struct PickUp {
+        cursor_offsets: Vec<IVec2>,
+    }
+
+    let mut to_pick_up: Option<PickUp> = None;
+    for (_item_entity, item_transform, item) in items.iter_mut() {
         if item_transform.translation.xz().round().as_ivec2() == player_cursor {
             if !is_holding {
                 *arbitrary_transform.get_mut(grab_icon.0).unwrap() =
@@ -146,12 +220,23 @@ pub fn grab_item_system(
             }
 
             if !is_holding && key.just_pressed(KeyCode::KeyE) {
-                item.is_held = true;
+                let mut cursor_offsets = item.glued.clone();
+                cursor_offsets.push(IVec2::ZERO);
+                to_pick_up = Some(PickUp { cursor_offsets });
+            }
+        }
+    }
 
-                if let Ok(mut wall) = is_wall.get_mut(item_entity) {
-                    // Disable the wall while it is being carried.
-                    wall.enabled = false;
-                }
+    if let Some(to_pick_up) = to_pick_up {
+        // Pick up all of the items glued to this one.
+        for &glue_offset in &to_pick_up.cursor_offsets {
+            let glued_item = ground_items.get(&(player_cursor + glue_offset)).unwrap();
+
+            let (_, _, mut item) = items.get_mut(glued_item.entity).unwrap();
+            item.is_held = Some(glue_offset);
+            if let Ok(mut wall) = is_wall.get_mut(glued_item.entity) {
+                // Disable the wall while it is being carried.
+                wall.enabled = false;
             }
         }
     }
@@ -160,7 +245,11 @@ pub fn grab_item_system(
         let scale = &mut arbitrary_transform.get_mut(grab_icon.0).unwrap().scale;
         *scale = Vec3::ZERO;
     }
-    if !set_icon_point {
-        arbitrary_transform.get_mut(point_icon.0).unwrap().scale = Vec3::splat(0.);
+    for j in set_point_icon_index..point_icon.0.len() {
+        let point_icon_entity = point_icon.0[j];
+        arbitrary_transform
+            .get_mut(point_icon_entity)
+            .unwrap()
+            .scale = Vec3::splat(0.);
     }
 }

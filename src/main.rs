@@ -52,15 +52,23 @@ fn setup(
         Transform::from_xyz(0.0, 0.45, 0.0),
     ));
 
+    // npc
+    commands.spawn((
+        Billboard {
+            image: "blue_bird.png".to_string(),
+        },
+        Transform::from_xyz(2.0, 0.45, 0.0),
+    ));
+
     // wall
 
     let mut rng = rand::rng();
 
     let wall_mesh = meshes.add(Cuboid::default());
     let wall_material = materials.add(Color::linear_rgb(1., 0.5, 0.2));
-    for x in -5..=5i32 {
-        for z in -5..=5i32 {
-            if x.abs() <= 2 && z.abs() <= 2 {
+    for x in -6..=6i32 {
+        for z in -6..=6i32 {
+            if x.abs() <= 3 && z.abs() <= 2 {
                 continue;
             }
 
@@ -77,7 +85,10 @@ fn setup(
         }
     }
     commands.spawn((
-        Item { is_held: false },
+        Item {
+            is_held: None,
+            glued: Vec::new(),
+        },
         Billboard {
             image: "apple.png".to_string(),
         },
@@ -85,12 +96,37 @@ fn setup(
     ));
 
     commands.spawn((
-        Item { is_held: false },
+        Item {
+            is_held: None,
+            glued: vec![IVec2::new(-1, 0), IVec2::new(1, 0)],
+        },
         Billboard {
             image: "fence.png".to_string(),
         },
         Wall { enabled: true },
         Transform::from_translation(Vec3::new(-2., 0.5, 1.)),
+    ));
+    commands.spawn((
+        Item {
+            is_held: None,
+            glued: vec![IVec2::new(1, 0), IVec2::new(2, 0)],
+        },
+        Billboard {
+            image: "fence.png".to_string(),
+        },
+        Wall { enabled: true },
+        Transform::from_translation(Vec3::new(-3., 0.5, 1.)),
+    ));
+    commands.spawn((
+        Item {
+            is_held: None,
+            glued: vec![IVec2::new(-1, 0), IVec2::new(-2, 0)],
+        },
+        Billboard {
+            image: "fence.png".to_string(),
+        },
+        Wall { enabled: true },
+        Transform::from_translation(Vec3::new(-1., 0.5, 1.)),
     ));
 
     // light
@@ -104,7 +140,7 @@ fn setup(
     // camera
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(0., 6.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Transform::from_xyz(0., 8.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
         BillboardCamera,
     ));
 }
