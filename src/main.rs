@@ -3,10 +3,12 @@ use rand::Rng;
 
 use crate::{
     billboard::{Billboard, BillboardCamera, BillboardPlugin},
-    player::PlayerPlugin,
+    item::{Item, ItemPlugin},
+    player::{PlayerPlugin, Wall},
 };
 
 pub mod billboard;
+pub mod item;
 pub mod player;
 
 fn main() {
@@ -19,7 +21,7 @@ fn main() {
             ..default()
         }))
         .add_plugins(bevy_framepace::FramepacePlugin)
-        .add_plugins((BillboardPlugin, PlayerPlugin))
+        .add_plugins((ItemPlugin, BillboardPlugin, PlayerPlugin))
         .add_systems(Startup, setup)
         .run();
 }
@@ -38,7 +40,12 @@ fn setup(
     ));
     // player
     commands.spawn((
-        player::Player::default(),
+        player::Player {
+            velocity: Vec3::ZERO,
+            recent_velocity: Vec3::ZERO,
+            facing_direction: 1.,
+            cursor: Vec3::new(1., 0., 0.),
+        },
         Billboard {
             image: "duck_realtor.png".to_string(),
         },
@@ -62,13 +69,29 @@ fn setup(
             }
 
             commands.spawn((
-                player::Wall,
+                player::Wall { enabled: true },
                 Mesh3d(wall_mesh.clone()),
                 MeshMaterial3d(wall_material.clone()),
                 Transform::from_translation(Vec3::new(x as f32, 0.5, z as f32)),
             ));
         }
     }
+    commands.spawn((
+        Item { is_held: false },
+        Billboard {
+            image: "apple.png".to_string(),
+        },
+        Transform::from_translation(Vec3::new(2., 0.5, 1.)),
+    ));
+
+    commands.spawn((
+        Item { is_held: false },
+        Billboard {
+            image: "fence.png".to_string(),
+        },
+        Wall { enabled: true },
+        Transform::from_translation(Vec3::new(-2., 0.5, 1.)),
+    ));
 
     // light
     commands.spawn((

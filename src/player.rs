@@ -12,18 +12,24 @@ impl Plugin for PlayerPlugin {
     }
 }
 
-#[derive(Component, Debug, Default)]
+#[derive(Component, Debug)]
 pub struct Player {
     pub velocity: Vec3,
     pub facing_direction: f32,
+    /// A moving average of velocity intent.
+    pub recent_velocity: Vec3,
+    /// The location where they want to pick up or drop items.
+    pub cursor: Vec3,
 }
 
 #[derive(Component)]
-pub struct Wall;
+pub struct Wall {
+    pub enabled: bool,
+}
 
 #[derive(Resource, Default)]
 pub struct WallGrid {
-    walls: HashSet<IVec2>,
+    pub walls: HashSet<IVec2>,
 }
 
 pub fn setup_walls_system(mut commands: Commands) {
@@ -33,13 +39,16 @@ pub fn setup_walls_system(mut commands: Commands) {
 }
 
 pub fn gather_walls_system(
-    wall_entities: Query<&Transform, With<Wall>>,
+    wall_entities: Query<(&Transform, &Wall)>,
     mut wall_grid: ResMut<WallGrid>,
 ) {
     wall_grid.walls.clear();
-    for wall in wall_entities.iter() {
-        let wall = wall.translation.xz().round().as_ivec2();
-        wall_grid.walls.insert(wall);
+    for (wall_transform, wall) in wall_entities.iter() {
+        if !wall.enabled {
+            continue;
+        }
+        let wall_square = wall_transform.translation.xz().round().as_ivec2();
+        wall_grid.walls.insert(wall_square);
     }
 }
 
@@ -49,10 +58,12 @@ pub fn move_player_system(
     camera: Query<&Transform, (With<BillboardCamera>, Without<Player>)>,
     key: Res<ButtonInput<KeyCode>>,
     wall_grid: Res<WallGrid>,
+    mut gizmos: Gizmos,
 ) {
     let Ok(camera) = camera.single() else {
         return;
     };
+
     let forward = (camera.forward().normalize() * Vec3::new(1., 0., 1.)).normalize_or_zero();
     let right = -Vec3::Y.cross(forward);
     let dt = time.delta_secs();
@@ -72,7 +83,19 @@ pub fn move_player_system(
         if key.pressed(KeyCode::KeyS) {
             target_velocity -= forward;
         }
-        target_velocity *= 5.5;
+        target_velocity *= 3.5;
+
+        player.recent_velocity = player
+            .recent_velocity
+            .lerp(target_velocity.clamp_length(0., 1.), (dt * 6.).min(1.));
+        if player.recent_velocity.length() < 0.25
+            && target_velocity
+                .normalize_or_zero()
+                .dot(player.recent_velocity.normalize_or_zero())
+                > -0.1
+        {
+            player.recent_velocity = player.recent_velocity.normalize_or_zero() * 0.25;
+        }
 
         // Find nearby walls and push the player out of them.
         let player_at = player_transform.translation.xz();
@@ -110,7 +133,21 @@ pub fn move_player_system(
         player.velocity = player.velocity.lerp(target_velocity, (dt * 12.).min(1.));
         player_transform.translation += dt * player.velocity;
 
+        let current_velocity = player.velocity;
+        player.cursor += dt * current_velocity * 6.; // Update faster, so it leads the player.
+        if player.cursor.distance(player_transform.translation) > 1. {
+            player.cursor = player_transform.translation.move_towards(player.cursor, 1.);
+        }
+
         player_transform.translation.x += delta_push.x;
         player_transform.translation.z += delta_push.y;
+
+        for yi in 0..5 {
+            gizmos.sphere(
+                player.cursor.round() + Vec3::Y * (yi as f32 * 0.2 + 0.1),
+                0.3,
+                Color::linear_rgb(0., 1., 1.),
+            );
+        }
     }
 }
