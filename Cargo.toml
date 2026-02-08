@@ -17,6 +17,7 @@ opt-level = 3
 
 [dependencies]
 bevy = "0.18"
+bevy_framepace = { git = "https://github.com/aevyrie/bevy_framepace.git", rev = "9be8f16210c341550e0593d57d12e54e7c9c1ee5" }
 
 # These lints may be important signals about code quality, but normal Bevy code
 # commonly triggers them and the CI workflow treats them as errors, so we've
