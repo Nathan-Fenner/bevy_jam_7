@@ -106,11 +106,19 @@ pub fn grab_item_system(
                         .distance(player_transform.translation.xz())
                         > 0.5
                 {
-                    *arbitrary_transform.get_mut(point_icon.0).unwrap() =
-                        Transform::from_translation(
-                            Vec3::new(player_cursor.x as f32, 0., player_cursor.y as f32)
-                                + Vec3::Y * 0.5,
-                        );
+                    let icon_transform = &mut *arbitrary_transform.get_mut(point_icon.0).unwrap();
+                    icon_transform.scale = Vec3::splat(1.);
+                    let target_position =
+                        Vec3::new(player_cursor.x as f32, 0., player_cursor.y as f32)
+                            + Vec3::Y * 0.5;
+
+                    if icon_transform.translation.distance(target_position) > 3.7 {
+                        icon_transform.translation = target_position;
+                    } else {
+                        icon_transform.translation = icon_transform
+                            .translation
+                            .lerp(target_position, (15. * dt).min(1.));
+                    }
                     set_icon_point = true;
 
                     if key.just_pressed(KeyCode::KeyE) {
@@ -149,10 +157,10 @@ pub fn grab_item_system(
     }
 
     if !set_icon_grab {
-        *arbitrary_transform.get_mut(grab_icon.0).unwrap() = Transform::from_scale(Vec3::splat(0.));
+        let scale = &mut arbitrary_transform.get_mut(grab_icon.0).unwrap().scale;
+        *scale = Vec3::ZERO;
     }
     if !set_icon_point {
-        *arbitrary_transform.get_mut(point_icon.0).unwrap() =
-            Transform::from_scale(Vec3::splat(0.));
+        arbitrary_transform.get_mut(point_icon.0).unwrap().scale = Vec3::splat(0.);
     }
 }

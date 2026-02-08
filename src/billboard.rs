@@ -100,6 +100,7 @@ fn track_billboards_system(
         let target = -*camera.forward() * Vec3::new(1., 0., 1.) * facing_direction;
 
         billboard_transform.look_to(target, -Vec3::Y);
+        billboard_transform.rotate_local_x(-0.5 * facing_direction);
         billboard_transform.rotate_local_z(wiggle);
     }
 }
