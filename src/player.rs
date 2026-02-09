@@ -7,7 +7,7 @@ impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup_walls_system).add_systems(
             FixedUpdate,
-            (gather_walls_system, move_player_system).chain(),
+            (gather_walls_system, move_player_system, move_camera_system).chain(),
         );
     }
 }
@@ -26,6 +26,13 @@ pub struct Player {
 pub struct Wall {
     pub enabled: bool,
 }
+
+#[derive(Component)]
+#[require(Wall { enabled: true})]
+pub struct Water {}
+
+#[derive(Component)]
+pub struct Bridge {}
 
 #[derive(Resource, Default)]
 pub struct WallGrid {
@@ -140,5 +147,18 @@ pub fn move_player_system(
 
         player_transform.translation.x += delta_push.x;
         player_transform.translation.z += delta_push.y;
+    }
+}
+
+pub fn move_camera_system(
+    mut camera: Query<&mut Transform, With<Camera>>,
+    player: Query<&Transform, (With<Player>, Without<Camera>)>,
+) {
+    let Ok(player) = player.single() else {
+        return;
+    };
+    for mut camera in camera.iter_mut() {
+        *camera = Transform::from_translation(player.translation + Vec3::new(0., 8.5, 9.5))
+            .looking_at(player.translation, Vec3::Y);
     }
 }

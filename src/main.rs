@@ -4,7 +4,7 @@ use rand::Rng;
 use crate::{
     billboard::{Billboard, BillboardCamera, BillboardPlugin},
     item::{Item, ItemPlugin},
-    player::{PlayerPlugin, Wall},
+    player::{PlayerPlugin, Wall, Water},
 };
 
 pub mod billboard;
@@ -13,13 +13,23 @@ pub mod player;
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins.set(AssetPlugin {
-            // Wasm builds will check for meta files (that don't exist) if this isn't set.
-            // This causes errors and even panics in web builds on itch.
-            // See https://github.com/bevyengine/bevy_github_ci_template/issues/48.
-            meta_check: bevy::asset::AssetMetaCheck::Never,
-            ..default()
-        }))
+        .add_plugins(
+            DefaultPlugins
+                .set(AssetPlugin {
+                    // Wasm builds will check for meta files (that don't exist) if this isn't set.
+                    // This causes errors and even panics in web builds on itch.
+                    // See https://github.com/bevyengine/bevy_github_ci_template/issues/48.
+                    meta_check: bevy::asset::AssetMetaCheck::Never,
+                    ..default()
+                })
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        present_mode: bevy::window::PresentMode::AutoVsync,
+                        ..default()
+                    }),
+                    ..default()
+                }),
+        )
         .add_plugins(bevy_framepace::FramepacePlugin)
         .add_plugins((ItemPlugin, BillboardPlugin, PlayerPlugin))
         .add_systems(Startup, setup)
@@ -32,24 +42,127 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
+    let level = image::open("assets/level.png").expect("can load level");
+    let level = level.as_rgb8().unwrap();
+
+    type LevelColor = [u8; 3];
+    const COLOR_PLAYER: LevelColor = [255, 0, 0];
+    const COLOR_FLOOR: LevelColor = [255, 255, 255];
+    const COLOR_WATER: LevelColor = [128, 128, 255];
+    const COLOR_WALL: LevelColor = [128, 128, 128];
+
+    const COLOR_FENCE: LevelColor = [255, 64, 0];
+    const COLOR_BRIDGE: LevelColor = [128, 64, 0];
+    const COLOR_DOOR: LevelColor = [255, 128, 0];
+    const COLOR_BLUEPRINT: LevelColor = [0, 0, 255];
+    const COLOR_BRICK_WALL: LevelColor = [255, 60, 0];
+
+    let wall_mesh = meshes.add(Cuboid::default());
+    let wall_material = materials.add(StandardMaterial {
+        base_color: Color::linear_rgb(1., 0.5, 0.2),
+        perceptual_roughness: 1.,
+        ..default()
+    });
+
+    let floor_material = materials.add(StandardMaterial {
+        base_color: Color::linear_rgb(0.7, 0.9, 0.8),
+        perceptual_roughness: 1.,
+        ..default()
+    });
+
+    let water_material = materials.add(StandardMaterial {
+        base_color: Color::linear_rgb(0.2, 0.4, 0.6),
+        perceptual_roughness: 0.25,
+        ..default()
+    });
+
+    let bridge_material = materials.add(StandardMaterial {
+        base_color: Color::linear_rgb(0.9, 0.8, 0.5),
+        ..default()
+    });
+
+    for x in 0..level.width() {
+        for y in 0..level.height() {
+            let pixel: LevelColor = level[(x, y)].0;
+            let at = Vec3::new(x as f32, 0., y as f32);
+
+            if pixel == COLOR_PLAYER {
+                // spawn player object
+                commands.spawn((
+                    player::Player {
+                        velocity: Vec3::ZERO,
+                        recent_velocity: Vec3::ZERO,
+                        facing_direction: 1.,
+                        cursor: Vec3::new(1., 0., 0.),
+                    },
+                    Billboard {
+                        image: "duck_realtor.png".to_string(),
+                    },
+                    Transform::from_translation(at + Vec3::new(0.0, 0.45, 0.0)),
+                ));
+            }
+            if pixel == COLOR_DOOR {
+                commands.spawn((
+                    Billboard {
+                        image: "door.png".to_string(),
+                    },
+                    Transform::from_translation(at + Vec3::new(0.0, 0.45, 0.0)),
+                ));
+            }
+            if pixel == COLOR_BLUEPRINT {
+                commands.spawn((
+                    Billboard {
+                        image: "blueprint.png".to_string(),
+                    },
+                    Transform::from_translation(at + Vec3::new(0.0, 0.45, 0.0)),
+                ));
+            }
+            if pixel == COLOR_WALL {
+                commands.spawn((
+                    player::Wall { enabled: true },
+                    Mesh3d(wall_mesh.clone()),
+                    MeshMaterial3d(wall_material.clone()),
+                    Transform::from_translation(at + Vec3::new(0., 0.5, 0.)),
+                ));
+            }
+            if pixel == COLOR_BRICK_WALL {
+                commands.spawn((
+                    player::Wall { enabled: true },
+                    Item {
+                        glued: Vec::new(),
+                        is_held: None,
+                    },
+                    Billboard {
+                        image: "brick_wall.png".to_string(),
+                    },
+                    Transform::from_translation(at + Vec3::new(0., 0.5, 0.)),
+                ));
+            }
+            if pixel != COLOR_WATER {
+                commands.spawn((
+                    Mesh3d(wall_mesh.clone()),
+                    MeshMaterial3d(floor_material.clone()),
+                    Transform::from_translation(at + Vec3::new(0., -0.5, 0.)),
+                ));
+            }
+            if pixel == COLOR_WATER {
+                commands.spawn((
+                    Mesh3d(wall_mesh.clone()),
+                    MeshMaterial3d(water_material.clone()),
+                    Transform::from_translation(at + Vec3::new(0., -0.75, 0.)),
+                    Water {},
+                ));
+            }
+        }
+    }
+
+    // let
+
     // circular base
     commands.spawn((
         Mesh3d(meshes.add(Circle::new(4.0))),
         MeshMaterial3d(materials.add(Color::WHITE)),
         Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
-    ));
-    // player
-    commands.spawn((
-        player::Player {
-            velocity: Vec3::ZERO,
-            recent_velocity: Vec3::ZERO,
-            facing_direction: 1.,
-            cursor: Vec3::new(1., 0., 0.),
-        },
-        Billboard {
-            image: "duck_realtor.png".to_string(),
-        },
-        Transform::from_xyz(0.0, 0.45, 0.0),
     ));
 
     // npc
@@ -61,29 +174,6 @@ fn setup(
     ));
 
     // wall
-
-    let mut rng = rand::rng();
-
-    let wall_mesh = meshes.add(Cuboid::default());
-    let wall_material = materials.add(Color::linear_rgb(1., 0.5, 0.2));
-    for x in -6..=6i32 {
-        for z in -6..=6i32 {
-            if x.abs() <= 3 && z.abs() <= 2 {
-                continue;
-            }
-
-            if rng.random_bool(0.5) {
-                continue;
-            }
-
-            commands.spawn((
-                player::Wall { enabled: true },
-                Mesh3d(wall_mesh.clone()),
-                MeshMaterial3d(wall_material.clone()),
-                Transform::from_translation(Vec3::new(x as f32, 0.5, z as f32)),
-            ));
-        }
-    }
     commands.spawn((
         Item {
             is_held: None,
@@ -129,13 +219,20 @@ fn setup(
         Transform::from_translation(Vec3::new(-1., 0.5, 1.)),
     ));
 
+    commands.spawn((
+        Billboard {
+            image: "ghost_of_real_estate.png".to_string(),
+        },
+        Transform::from_translation(Vec3::new(12., 0.5, 17.)),
+    ));
+
     // light
     commands.spawn((
-        PointLight {
+        DirectionalLight {
             shadows_enabled: true,
             ..default()
         },
-        Transform::from_xyz(4.0, 8.0, 4.0),
+        Transform::from_xyz(4.0, 8.0, 4.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
     // camera
     commands.spawn((
