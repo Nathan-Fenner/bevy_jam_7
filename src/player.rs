@@ -151,8 +151,8 @@ pub fn move_player_system(
 }
 
 pub fn move_camera_system(
-    mut camera: Query<&mut Transform, With<Camera>>,
-    player: Query<&Transform, (With<Player>, Without<Camera>)>,
+    mut camera: Query<&mut Transform, With<BillboardCamera>>,
+    player: Query<&Transform, (With<Player>, Without<BillboardCamera>)>,
 ) {
     let Ok(player) = player.single() else {
         return;

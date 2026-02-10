@@ -42,7 +42,7 @@ pub fn setup_grab_system(mut commands: Commands) {
             Billboard {
                 image: "grab_icon.png".to_string(),
             },
-            Transform::from_scale(Vec3::splat(0.)),
+            Transform::from_scale(Vec3::splat(1.)),
         ))
         .id();
     commands.insert_resource(GrabIconEntity(grab_icon));

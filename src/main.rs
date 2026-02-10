@@ -1,13 +1,14 @@
 use bevy::prelude::*;
-use rand::Rng;
 
 use crate::{
     billboard::{Billboard, BillboardCamera, BillboardPlugin},
+    blueprint::{Blueprint, BlueprintPlugin, Door},
     item::{Item, ItemPlugin},
     player::{PlayerPlugin, Wall, Water},
 };
 
 pub mod billboard;
+pub mod blueprint;
 pub mod item;
 pub mod player;
 
@@ -31,7 +32,7 @@ fn main() {
                 }),
         )
         .add_plugins(bevy_framepace::FramepacePlugin)
-        .add_plugins((ItemPlugin, BillboardPlugin, PlayerPlugin))
+        .add_plugins((ItemPlugin, BillboardPlugin, PlayerPlugin, BlueprintPlugin))
         .add_systems(Startup, setup)
         .run();
 }
@@ -107,6 +108,7 @@ fn setup(
                         image: "door.png".to_string(),
                     },
                     Transform::from_translation(at + Vec3::new(0.0, 0.45, 0.0)),
+                    Door,
                 ));
             }
             if pixel == COLOR_BLUEPRINT {
@@ -114,6 +116,7 @@ fn setup(
                     Billboard {
                         image: "blueprint.png".to_string(),
                     },
+                    Blueprint,
                     Transform::from_translation(at + Vec3::new(0.0, 0.45, 0.0)),
                 ));
             }
