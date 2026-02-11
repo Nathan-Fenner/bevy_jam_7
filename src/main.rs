@@ -5,12 +5,14 @@ use crate::{
     blueprint::{Blueprint, BlueprintPlugin, Door},
     item::{Item, ItemPlugin},
     player::{PlayerPlugin, Wall, Water},
+    rooms::RoomsPlugin,
 };
 
 pub mod billboard;
 pub mod blueprint;
 pub mod item;
 pub mod player;
+pub mod rooms;
 
 fn main() {
     App::new()
@@ -32,7 +34,13 @@ fn main() {
                 }),
         )
         .add_plugins(bevy_framepace::FramepacePlugin)
-        .add_plugins((ItemPlugin, BillboardPlugin, PlayerPlugin, BlueprintPlugin))
+        .add_plugins((
+            RoomsPlugin,
+            ItemPlugin,
+            BillboardPlugin,
+            PlayerPlugin,
+            BlueprintPlugin,
+        ))
         .add_systems(Startup, setup)
         .run();
 }
@@ -158,15 +166,6 @@ fn setup(
             }
         }
     }
-
-    // let
-
-    // circular base
-    commands.spawn((
-        Mesh3d(meshes.add(Circle::new(4.0))),
-        MeshMaterial3d(materials.add(Color::WHITE)),
-        Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
-    ));
 
     // npc
     commands.spawn((
