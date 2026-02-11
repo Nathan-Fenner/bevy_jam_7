@@ -61,7 +61,11 @@ pub fn gather_walls_system(
 
 pub fn move_player_system(
     time: Res<Time>,
-    mut players: Query<(&mut Transform, &mut Player)>,
+    mut players: Query<(
+        &Transform,
+        &mut Player,
+        &mut avian3d::prelude::LinearVelocity,
+    )>,
     camera: Query<&Transform, (With<BillboardCamera>, Without<Player>)>,
     key: Res<ButtonInput<KeyCode>>,
     wall_grid: Res<WallGrid>,
@@ -73,7 +77,7 @@ pub fn move_player_system(
     let forward = (camera.forward().normalize() * Vec3::new(1., 0., 1.)).normalize_or_zero();
     let right = -Vec3::Y.cross(forward);
     let dt = time.delta_secs();
-    for (mut player_transform, mut player) in players.iter_mut() {
+    for (player_transform, mut player, mut player_velocity) in players.iter_mut() {
         let mut target_velocity = Vec3::ZERO;
         if key.pressed(KeyCode::KeyD) {
             player.facing_direction = 1.;
@@ -104,40 +108,11 @@ pub fn move_player_system(
         }
 
         // Find nearby walls and push the player out of them.
-        let player_at = player_transform.translation.xz();
-        let player_at_square = player_at.round().as_ivec2();
         let mut delta_push = Vec2::ZERO;
         let player_radius = 0.35;
         let block_half_size = 0.5;
-        let mut did_hit_wall = false;
-        for dx in [-1, 0, 1] {
-            for dy in [-1, 0, 1] {
-                let neighbor = player_at_square + IVec2::new(dx, dy);
-                if wall_grid.walls.contains(&neighbor) {
-                    let delta: Vec2 = player_at - neighbor.as_vec2();
-                    let push_corner =
-                        delta.clamp(-Vec2::splat(block_half_size), Vec2::splat(block_half_size));
-
-                    let out_vector = delta - push_corner;
-                    let out_length = out_vector.length();
-                    if out_length < player_radius {
-                        if out_length < player_radius * 0.9 {
-                            did_hit_wall = true;
-                        }
-                        let out_vector_strength =
-                            out_vector.normalize_or_zero() * (player_radius - out_length);
-                        delta_push += out_vector_strength * 0.3;
-                    }
-                }
-            }
-        }
-
-        if did_hit_wall {
-            target_velocity *= 0.5;
-        }
 
         player.velocity = player.velocity.lerp(target_velocity, (dt * 12.).min(1.));
-        player_transform.translation += dt * player.velocity;
 
         let current_velocity = player.velocity;
         player.cursor += dt * current_velocity * 6.; // Update faster, so it leads the player.
@@ -145,8 +120,11 @@ pub fn move_player_system(
             player.cursor = player_transform.translation.move_towards(player.cursor, 1.);
         }
 
-        player_transform.translation.x += delta_push.x;
-        player_transform.translation.z += delta_push.y;
+        // player_transform.translation.x += delta_push.x;
+        // player_transform.translation.z += delta_push.y;
+
+        player_velocity.0.x = player.velocity.x;
+        player_velocity.0.z = player.velocity.z;
     }
 }
 

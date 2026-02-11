@@ -1,4 +1,8 @@
-use bevy::{asset::RenderAssetUsages, platform::collections::HashMap, prelude::*};
+use bevy::{
+    asset::RenderAssetUsages,
+    platform::collections::{HashMap, HashSet},
+    prelude::*,
+};
 
 pub struct RoomsPlugin;
 
@@ -20,17 +24,17 @@ pub fn setup_rooms(
     let room_image = image::open("assets/room4.png").expect("can load room image");
     let room_image = room_image.as_rgba8().expect("is rgba8");
 
-    // TODO: optimize mesh, or whatever
+    let room_collider_image =
+        image::open("assets/room4_collider.png").expect("can load room collider image");
+    let room_collider_image = room_collider_image.as_rgba8().expect("is rgba8");
 
-    let is_solid = |p: IVec2| -> bool {
-        if p.x < 0
-            || p.y < 0
-            || p.x >= room_image.width() as i32
-            || p.y >= room_image.height() as i32
-        {
+    type ImageLayer = image::ImageBuffer<image::Rgba<u8>, Vec<u8>>;
+
+    let is_solid = |layer: &ImageLayer, p: IVec2| -> bool {
+        if p.x < 0 || p.y < 0 || p.x >= layer.width() as i32 || p.y >= layer.height() as i32 {
             return false;
         }
-        room_image[(p.x as u32, p.y as u32)].0[3] >= 128
+        layer[(p.x as u32, p.y as u32)].0[3] >= 128
     };
 
     let mut mesh = Mesh::new(
@@ -54,7 +58,7 @@ pub fn setup_rooms(
 
     for x in 0..room_image.width() {
         for y in 0..room_image.height() {
-            let h = if is_solid(IVec2::new(x as i32, y as i32)) {
+            let h = if is_solid(&room_image, IVec2::new(x as i32, y as i32)) {
                 2
             } else {
                 1
@@ -107,15 +111,17 @@ pub fn setup_rooms(
         )
     };
 
+    let room_size = 3.;
+
     for v in &vert_list {
         attr_pos.push(Vec3::new(
-            (v.x as f32 / room_image.width() as f32 - 0.5) * 3.,
+            (v.x as f32 / room_image.width() as f32 - 0.5) * room_size,
             match v.y {
                 2 => 1.,
                 1 => 0.05,
                 _ => 0.,
             },
-            (v.z as f32 / room_image.height() as f32 - 0.5) * 3.,
+            (v.z as f32 / room_image.height() as f32 - 0.5) * room_size,
         ));
 
         // Nudge the UV inward slightly.
@@ -128,7 +134,7 @@ pub fn setup_rooms(
             IVec2::new(-1, -1),
         ] {
             let neighbor_pixel = v.xz() + shift;
-            if is_solid(neighbor_pixel) {
+            if is_solid(&room_image, neighbor_pixel) {
                 sum_uv += (shift.as_vec2() + 0.5) * 0.1 / room_image.width() as f32;
             }
         }
@@ -139,6 +145,68 @@ pub fn setup_rooms(
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, attr_pos);
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, attr_uv0);
     mesh.insert_indices(bevy::mesh::Indices::U32(triangles));
+
+    let mut room_colliders: Vec<(Vec3, avian3d::prelude::Rotation, avian3d::prelude::Collider)> =
+        Vec::new();
+
+    {
+        let mut visited: HashSet<IVec2> = HashSet::new();
+        for x in 0..room_collider_image.width() as i32 {
+            for y in 0..room_collider_image.height() as i32 {
+                let p = IVec2::new(x, y);
+                if !is_solid(&room_collider_image, p) || visited.contains(&p) {
+                    continue;
+                }
+
+                visited.insert(p);
+                let mut region_list: Vec<IVec2> = Vec::new();
+                let mut region_stack = vec![p];
+
+                while let Some(c) = region_stack.pop() {
+                    region_list.push(c);
+                    for dir in [IVec2::X, IVec2::Y, IVec2::NEG_X, IVec2::NEG_Y] {
+                        let n = c + dir;
+                        if !is_solid(&room_collider_image, n)
+                            || visited.contains(&n)
+                            || room_collider_image[(n.x as u32, n.y as u32)].0[..3]
+                                != room_collider_image[(p.x as u32, p.y as u32)].0[..3]
+                        {
+                            continue;
+                        }
+                        visited.insert(n);
+                        region_stack.push(n);
+                    }
+                }
+
+                let room_collider_height = 1.2;
+
+                let mut bound_min = p;
+                let mut bound_max = p;
+                for &c in &region_list {
+                    bound_min = bound_min.min(c);
+                    bound_max = bound_max.max(c);
+                }
+                let lower = (to_uv(bound_min) - 0.5) * room_size;
+                let upper = (to_uv(bound_max + IVec2::new(1, 1)) - 0.5) * room_size;
+                room_colliders.push((
+                    Vec3::new(
+                        (lower.x + upper.x) / 2.,
+                        room_collider_height / 2.,
+                        (lower.y + upper.y) / 2.,
+                    ),
+                    avian3d::prelude::Rotation::IDENTITY,
+                    avian3d::prelude::Collider::cuboid(
+                        upper.x - lower.x,
+                        room_collider_height,
+                        upper.y - lower.y,
+                    ),
+                ));
+            }
+        }
+    }
+
+    let room_collider = avian3d::prelude::Collider::compound(room_colliders);
+
     mesh.duplicate_vertices();
     mesh.compute_flat_normals();
 
@@ -162,5 +230,7 @@ pub fn setup_rooms(
             base_color: Color::linear_rgb(0.7, 0.8, 0.9),
             ..default()
         })),
+        avian3d::prelude::RigidBody::Static,
+        room_collider,
     ));
 }

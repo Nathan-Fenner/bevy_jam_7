@@ -33,6 +33,7 @@ fn main() {
                     ..default()
                 }),
         )
+        .add_plugins(avian3d::PhysicsPlugins::default())
         .add_plugins(bevy_framepace::FramepacePlugin)
         .add_plugins((
             RoomsPlugin,
@@ -42,6 +43,9 @@ fn main() {
             BlueprintPlugin,
         ))
         .add_systems(Startup, setup)
+        .insert_resource(Time::<Virtual>::from_max_delta(
+            std::time::Duration::from_millis(60),
+        ))
         .run();
 }
 
@@ -90,6 +94,16 @@ fn setup(
         ..default()
     });
 
+    let cube_collider = avian3d::prelude::Collider::cuboid(1., 1., 1.);
+
+    let ground_collider = avian3d::prelude::Collider::cuboid(1000., 1., 1000.);
+
+    commands.spawn((
+        avian3d::prelude::RigidBody::Static,
+        ground_collider,
+        Transform::from_translation(Vec3::new(0., -0.5, 0.)),
+    ));
+
     for x in 0..level.width() {
         for y in 0..level.height() {
             let pixel: LevelColor = level[(x, y)].0;
@@ -97,7 +111,18 @@ fn setup(
 
             if pixel == COLOR_PLAYER {
                 // spawn player object
+
+                /*
+
+                         RigidBody::Dynamic,
+                Collider::capsule(0.5, 1.5),
+                Transform::from_xyz(0.0, 3.0, 0.0),
+                         */
+
                 commands.spawn((
+                    avian3d::prelude::RigidBody::Dynamic,
+                    avian3d::prelude::Collider::capsule(0.3, 0.8),
+                    avian3d::prelude::LockedAxes::ROTATION_LOCKED,
                     player::Player {
                         velocity: Vec3::ZERO,
                         recent_velocity: Vec3::ZERO,
@@ -107,7 +132,7 @@ fn setup(
                     Billboard {
                         image: "duck_realtor.png".to_string(),
                     },
-                    Transform::from_translation(at + Vec3::new(0.0, 0.45, 0.0)),
+                    Transform::from_translation(at + Vec3::new(0.0, 3.9, 0.0)),
                 ));
             }
             if pixel == COLOR_DOOR {
@@ -131,6 +156,8 @@ fn setup(
             if pixel == COLOR_WALL {
                 commands.spawn((
                     player::Wall { enabled: true },
+                    avian3d::prelude::RigidBody::Static,
+                    cube_collider.clone(),
                     Mesh3d(wall_mesh.clone()),
                     MeshMaterial3d(wall_material.clone()),
                     Transform::from_translation(at + Vec3::new(0., 0.5, 0.)),
@@ -138,6 +165,8 @@ fn setup(
             }
             if pixel == COLOR_BRICK_WALL {
                 commands.spawn((
+                    avian3d::prelude::RigidBody::Static,
+                    cube_collider.clone(),
                     player::Wall { enabled: true },
                     Item {
                         glued: Vec::new(),
