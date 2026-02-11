@@ -12,20 +12,25 @@ impl Plugin for RoomsPlugin {
     }
 }
 
-#[derive(Resource)]
-pub struct RoomInfo {}
+pub struct RoomSpec {
+    pub material: Handle<StandardMaterial>,
+    pub mesh: Handle<Mesh>,
+    pub collider: avian3d::prelude::Collider,
+}
 
-pub fn setup_rooms(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    asset_server: Res<AssetServer>,
-) {
-    let room_image = image::open("assets/room4.png").expect("can load room image");
+fn load_room(
+    room_image_path: &str,
+    room_collider_image: &str,
+    asset_server: &AssetServer,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+) -> RoomSpec {
+    let room_image =
+        image::open(&format!("assets/{}", room_image_path)).expect("can load room image");
     let room_image = room_image.as_rgba8().expect("is rgba8");
 
-    let room_collider_image =
-        image::open("assets/room4_collider.png").expect("can load room collider image");
+    let room_collider_image = image::open(&format!("assets/{}", room_collider_image))
+        .expect("can load room collider image");
     let room_collider_image = room_collider_image.as_rgba8().expect("is rgba8");
 
     type ImageLayer = image::ImageBuffer<image::Rgba<u8>, Vec<u8>>;
@@ -212,25 +217,50 @@ pub fn setup_rooms(
 
     let mesh_handle = meshes.add(mesh);
 
+    let material_handle = materials.add(StandardMaterial {
+        base_color_texture: Some(asset_server.load_with_settings(
+            room_image_path.to_string(),
+            |settings: &mut bevy::image::ImageLoaderSettings| {
+                settings.sampler =
+                    bevy::image::ImageSampler::Descriptor(bevy::image::ImageSamplerDescriptor {
+                        mag_filter: bevy::image::ImageFilterMode::Nearest,
+                        ..default()
+                    });
+            },
+        )),
+        base_color: Color::linear_rgb(0.7, 0.8, 0.9),
+        ..default()
+    });
+
+    RoomSpec {
+        material: material_handle,
+        mesh: mesh_handle,
+        collider: room_collider,
+    }
+}
+
+#[derive(Resource)]
+pub struct RoomInfo {}
+
+pub fn setup_rooms(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let room = load_room(
+        "room4.png",
+        "room4_collider.png",
+        &asset_server,
+        &mut meshes,
+        &mut materials,
+    );
+
     println!("SPAWN THE ROOM");
     commands.spawn((
-        Mesh3d(mesh_handle),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color_texture: Some(asset_server.load_with_settings(
-                "room4.png",
-                |settings: &mut bevy::image::ImageLoaderSettings| {
-                    settings.sampler = bevy::image::ImageSampler::Descriptor(
-                        bevy::image::ImageSamplerDescriptor {
-                            mag_filter: bevy::image::ImageFilterMode::Nearest,
-                            ..default()
-                        },
-                    );
-                },
-            )),
-            base_color: Color::linear_rgb(0.7, 0.8, 0.9),
-            ..default()
-        })),
         avian3d::prelude::RigidBody::Static,
-        room_collider,
+        Mesh3d(room.mesh.clone()),
+        MeshMaterial3d(room.material.clone()),
+        room.collider.clone(),
     ));
 }
